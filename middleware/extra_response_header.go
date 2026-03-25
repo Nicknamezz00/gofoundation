@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"net/http"
+	"github.com/Nicknamezz00/gofoundation/trace"
 )
 
 const TraceIDHeader = "X-Trace-Id"
@@ -11,7 +12,7 @@ const TraceIDHeader = "X-Trace-Id"
 func ExtraResponseHeader() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if ti := GetTraceInfo(r.Context()); ti != nil && ti.TraceID != "" {
+			if ti := trace.GetTraceInfo(r.Context()); ti != nil && ti.TraceID != "" {
 				// Must be set before the handler writes the response.
 				w.Header().Set(TraceIDHeader, ti.TraceID)
 			}
