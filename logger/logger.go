@@ -17,6 +17,13 @@ import (
 
 var json = jsoniter.ConfigCompatibleWithStandardLibrary
 
+var bufPool = sync.Pool{
+	New: func() interface{} {
+		b := make([]byte, 0, 1024)
+		return &b
+	},
+}
+
 type logger struct {
 	config Config
 	writer io.Writer
@@ -121,47 +128,76 @@ func (l *logger) log(level Level, msg string, err error, fields ...Field) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	// Build ordered map for JSON output
-	entry := make(map[string]interface{})
+	bp := bufPool.Get().(*[]byte)
+	buf := (*bp)[:0]
 
-	// Ordered keys: level, trace_id, span_id, error, message, caller, timestamp, ...fields
-	entry["level"] = level.String()
-	entry["message"] = msg
-	entry["timestamp"] = time.Now().Format(time.RFC3339Nano)
+	// Build JSON directly in fixed order — no map, no intermediate structs
+	buf = append(buf, `{"level":"`...)
+	buf = append(buf, level.String()...)
+	buf = append(buf, `","message":`...)
+	buf = appendJSONString(buf, msg)
+	buf = append(buf, `,"timestamp":"`...)
+	buf = time.Now().AppendFormat(buf, time.RFC3339Nano)
+	buf = append(buf, `","caller":"`...)
+	buf = append(buf, l.getCaller()...)
+	buf = append(buf, '"')
 
-	// Add caller info
-	entry["caller"] = l.getCaller()
-
-	// Add error if present
 	if err != nil {
-		entry["error"] = err.Error()
+		buf = append(buf, `,"error":`...)
+		buf = appendJSONString(buf, err.Error())
 	}
 
-	// Add base fields (including trace_id and span_id as top-level)
 	for _, f := range l.fields {
-		entry[f.Key] = f.Value
+		buf = appendField(buf, f)
 	}
-
-	// Add additional fields
 	for _, f := range fields {
-		entry[f.Key] = f.Value
+		buf = appendField(buf, f)
 	}
 
-	// Marshal to JSON
-	data, err := json.Marshal(entry)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to marshal log entry: %v\n", err)
-		return
+	buf = append(buf, "}\n"...)
+
+	if _, writeErr := l.writer.Write(buf); writeErr != nil {
+		fmt.Fprintf(os.Stderr, "failed to write log entry: %v\n", writeErr)
 	}
 
-	// Write to output
-	if _, err := l.writer.Write(data); err != nil {
-		fmt.Fprintf(os.Stderr, "failed to write log entry: %v\n", err)
-		return
+	*bp = buf
+	bufPool.Put(bp)
+}
+
+func appendField(buf []byte, f Field) []byte {
+	buf = append(buf, ',', '"')
+	buf = append(buf, f.Key...)
+	buf = append(buf, '"', ':')
+	val, _ := json.Marshal(f.Value)
+	buf = append(buf, val...)
+	return buf
+}
+
+func appendJSONString(buf []byte, s string) []byte {
+	buf = append(buf, '"')
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch c {
+		case '"':
+			buf = append(buf, '\\', '"')
+		case '\\':
+			buf = append(buf, '\\', '\\')
+		case '\n':
+			buf = append(buf, '\\', 'n')
+		case '\r':
+			buf = append(buf, '\\', 'r')
+		case '\t':
+			buf = append(buf, '\\', 't')
+		default:
+			if c < 0x20 {
+				buf = append(buf, '\\', 'u', '0', '0', "0123456789abcdef"[c>>4], "0123456789abcdef"[c&0xf])
+			} else {
+				buf = append(buf, c)
+			}
+		}
 	}
-	if _, err := l.writer.Write([]byte("\n")); err != nil {
-		fmt.Fprintf(os.Stderr, "failed to write log newline: %v\n", err)
-	}
+	buf = append(buf, '"')
+	return buf
 }
 
 func (l *logger) getCaller() string {
