@@ -79,7 +79,7 @@ func (f *FakeProvider) Watch(ctx context.Context, name string) (<-chan []Service
 		<-ctx.Done()
 		f.mu.Lock()
 		chans := f.watchers[name]
-		filtered := chans[:0]
+		filtered := make([]chan []ServiceInstance, 0, len(chans))
 		for _, c := range chans {
 			if c != ch {
 				filtered = append(filtered, c)

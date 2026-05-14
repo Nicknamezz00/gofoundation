@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -28,8 +29,7 @@ func newTestProvider(t *testing.T, mux *http.ServeMux) *consul.ConsulProvider {
 }
 
 func TestConsulProvider_Register(t *testing.T) {
-	registered := false
-	ttlPassed := false
+	var registered, ttlPassed atomic.Bool
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v1/agent/service/register", func(w http.ResponseWriter, r *http.Request) {
@@ -37,11 +37,11 @@ func TestConsulProvider_Register(t *testing.T) {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		registered = true
+		registered.Store(true)
 		w.WriteHeader(http.StatusOK)
 	})
 	mux.HandleFunc("/v1/agent/check/update/", func(w http.ResponseWriter, r *http.Request) {
-		ttlPassed = true
+		ttlPassed.Store(true)
 		w.WriteHeader(http.StatusOK)
 	})
 
@@ -59,20 +59,20 @@ func TestConsulProvider_Register(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Register: %v", err)
 	}
-	if !registered {
+	if !registered.Load() {
 		t.Error("expected service registration request")
 	}
-	if !ttlPassed {
+	if !ttlPassed.Load() {
 		t.Error("expected initial TTL pass request")
 	}
 }
 
 func TestConsulProvider_Deregister(t *testing.T) {
-	deregistered := false
+	var deregistered atomic.Bool
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v1/agent/service/deregister/svc-1", func(w http.ResponseWriter, r *http.Request) {
-		deregistered = true
+		deregistered.Store(true)
 		w.WriteHeader(http.StatusOK)
 	})
 
@@ -80,7 +80,7 @@ func TestConsulProvider_Deregister(t *testing.T) {
 	if err := p.Deregister(context.Background(), "svc-1"); err != nil {
 		t.Fatalf("Deregister: %v", err)
 	}
-	if !deregistered {
+	if !deregistered.Load() {
 		t.Error("expected deregister request")
 	}
 }

@@ -42,7 +42,9 @@ func TestFakeProvider_Deregister(t *testing.T) {
 	p := &discovery.FakeProvider{}
 	ctx := context.Background()
 
-	_ = p.Register(ctx, newDef("svc-1", "kb"))
+	if err := p.Register(ctx, newDef("svc-1", "kb")); err != nil {
+		t.Fatalf("Register: %v", err)
+	}
 	if err := p.Deregister(ctx, "svc-1"); err != nil {
 		t.Fatalf("Deregister: %v", err)
 	}

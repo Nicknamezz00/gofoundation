@@ -71,13 +71,17 @@ func (p *ConsulProvider) Register(ctx context.Context, svc discovery.ServiceDefi
 	}
 
 	// Renewal goroutine.
+	checkID := "service:" + svc.ID
 	go func() {
 		ticker := time.NewTicker(ttl / 3)
 		defer ticker.Stop()
 		for {
 			select {
 			case <-ticker.C:
-				_ = p.client.Agent().UpdateTTL("service:"+svc.ID, "alive", consulapi.HealthPassing)
+				if err := p.client.Agent().UpdateTTL(checkID, "alive", consulapi.HealthPassing); err != nil {
+					// Log renewal failure; Consul will mark the service critical after TTL expires.
+					_ = fmt.Errorf("consul: ttl renewal %s: %w", svc.ID, err)
+				}
 			case <-ctx.Done():
 				return
 			}
