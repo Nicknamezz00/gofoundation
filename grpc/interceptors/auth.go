@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	grpcmeta "github.com/Nicknamezz00/rago-api/shared/grpc/metadata"
+	grpcmeta "github.com/Nicknamezz00/gofoundation/grpc/metadata"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"

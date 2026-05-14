@@ -4,7 +4,7 @@ import (
 	"net/http"
 
 	"github.com/Nicknamezz00/gofoundation/trace"
-	grpcmeta "github.com/Nicknamezz00/rago-api/shared/grpc/metadata"
+	grpcmeta "github.com/Nicknamezz00/gofoundation/grpc/metadata"
 )
 
 // GRPCTrace injects the current request's trace ID into the outgoing gRPC metadata
