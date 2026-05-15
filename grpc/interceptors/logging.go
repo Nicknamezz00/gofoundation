@@ -40,6 +40,7 @@ func LoggingInterceptor(l logger.Logger) grpc.UnaryServerInterceptor {
 			fields = append(fields,
 				logger.String("error", st.Message()),
 				logger.String("code", st.Code().String()),
+				logger.Any("detail", st.Details()),
 			)
 			l.WithContext(ctx).Error("gRPC request completed with error", fields...)
 		} else {
